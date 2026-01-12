@@ -1434,3 +1434,8 @@ func (conn *Conn) closeErr(op string) error {
 		return conn.wrap(net.ErrClosed, op)
 	}
 }
+
+// InternalConn returns the underlying conn inside of the minecraft conn.
+func (conn *Conn) InternalConn() net.Conn {
+	return conn.conn
+}
