@@ -307,7 +307,7 @@ var checkVersion = regexp.MustCompile("[0-9.]").MatchString
 
 // Validate validates the client data. It returns an error if any of the fields checked did not carry a valid
 // value.
-func (data *ClientData) Validate() error {
+func (data ClientData) Validate() error {
 	if data.DeviceOS <= 0 || data.DeviceOS > 15 {
 		return fmt.Errorf("DeviceOS must carry a value between 1 and 15, but got %v", data.DeviceOS)
 	}
@@ -408,19 +408,29 @@ const (
 	DeviceIDFormatBase64
 	DeviceIDFormatUUID
 	DeviceIDFormatInvalid
-	DeviceIDFormatUnknown
 )
 
 func (format DeviceIDFormat) String() string {
-	return [...]string{"UpperHexString", "LowerHexString", "Base64", "UUID", "Invalid", "Unknown"}[format]
+	switch format {
+	case DeviceIDFormatUpperHexString:
+		return "UpperHexString"
+	case DeviceIDFormatLowerHexString:
+		return "LowerHexString"
+	case DeviceIDFormatBase64:
+		return "Base64"
+	case DeviceIDFormatUUID:
+		return "UUID"
+	case DeviceIDFormatInvalid:
+		return "Invalid"
+	}
+	return "Unknown"
 }
 
 // Used to check the provided DeviceID contains only lower-case characters and digits.
 var lowerMatch = regexp.MustCompile(`^[a-z0-9]+$`)
 
 // Format determines the format of the DeviceID based on documented types,
-// if no format is determined, DeviceIDFormatUnknown is returned;
-// if a format is found but the constraints aren't met DeviceIDFormatInvalid is returned.
+// if no format is determined, DeviceIDFormatInvalid is returned.
 func (dId DeviceID) Format() DeviceIDFormat {
 	deviceId := string(dId)
 
@@ -443,18 +453,15 @@ func (dId DeviceID) Format() DeviceIDFormat {
 	}
 
 	data, err = base64.StdEncoding.DecodeString(deviceId)
-	if err == nil {
-		if len(data) != 32 {
-			return DeviceIDFormatInvalid
-		}
+	if err == nil && len(data) == 32 {
 		return DeviceIDFormatBase64
 	}
 
-	return DeviceIDFormatUnknown
+	return DeviceIDFormatInvalid
 }
 
 // Expected returns the expected format of the DeviceID based on the provided DeviceOS.
-func (data *ClientData) ExpectedDeviceIDFormat() DeviceIDFormat {
+func (data ClientData) ExpectedDeviceIDFormat() DeviceIDFormat {
 	switch data.DeviceOS {
 	case protocol.DeviceAndroid:
 		return DeviceIDFormatLowerHexString // "a4f365bb1e04459bbe4cb3cbf9d546e0",
@@ -467,5 +474,5 @@ func (data *ClientData) ExpectedDeviceIDFormat() DeviceIDFormat {
 	case protocol.DeviceXBOX:
 		return DeviceIDFormatBase64 // "VlhnpI7TuWyfHiUx3WYwFvQQHbDkv505h6VVo40Cngw=",
 	}
-	return DeviceIDFormatUnknown
+	return DeviceIDFormatInvalid
 }
