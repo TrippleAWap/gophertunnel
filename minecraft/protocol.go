@@ -34,7 +34,7 @@ type Protocol interface {
 	ConvertToLatest(pk packet.Packet, conn *Conn) []packet.Packet
 	// ConvertFromLatest converts a packet.Packet of the most recent Protocol to a slice of packet.Packets of this
 	// specific Protocol. ConvertFromLatest must be synonymous to ConvertToLatest, in that it should convert any
-	// packet.Packet to the correct one from the packet.Pool returned through a call to Packets if its payload or ID was
+	// packet.Packet to the correct one from the packet.Pool returned through a call to Packets if its Payload or ID was
 	// changed in this Protocol compared to the latest one.
 	ConvertFromLatest(pk packet.Packet, conn *Conn) []packet.Packet
 }

@@ -60,7 +60,7 @@ type Dialer struct {
 
 	// PacketFunc is called whenever a packet is read from or written to the connection returned when using
 	// Dialer.Dial(). It includes packets that are otherwise covered in the connection sequence, such as the
-	// Login packet. The function is called with the header of the packet and its raw payload, the address
+	// Login packet. The function is called with the header of the packet and its raw Payload, the address
 	// from which the packet originated, and the destination address.
 	PacketFunc func(header packet.Header, payload []byte, src, dst net.Addr)
 
@@ -310,7 +310,7 @@ func listenConn(conn *Conn, readyForLogin, connected chan struct{}, cancel conte
 	}()
 	cancelContext := true
 	for {
-		// We finally arrived at the packet decoding loop. We constantly decode packets that arrive
+		// We finally arrived at the packet decoding loop. We constantly Decode packets that arrive
 		// and push them to the Conn so that they may be processed.
 		packets, err := conn.dec.Decode()
 		if err != nil {

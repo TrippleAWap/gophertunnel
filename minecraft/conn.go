@@ -111,13 +111,13 @@ type Conn struct {
 
 	// packets is a channel of byte slices containing serialised packets that are coming in from the other
 	// side of the connection.
-	packets chan *packetData
+	packets chan *PacketData
 
 	deferredPacketMu sync.Mutex
 	// deferredPackets is a list of packets that were pushed back during the login sequence because they
 	// were not used by the connection yet. These packets are read the first when calling to Read or
 	// ReadPacket after being connected.
-	deferredPackets []*packetData
+	deferredPackets []*PacketData
 	readDeadline    <-chan time.Time
 
 	sendMu sync.Mutex
@@ -179,7 +179,7 @@ func newConn(netConn net.Conn, key *ecdsa.PrivateKey, log *slog.Logger, proto Pr
 		enc:          packet.NewEncoder(netConn),
 		dec:          packet.NewDecoder(netConn),
 		salt:         make([]byte, 16),
-		packets:      make(chan *packetData, 8),
+		packets:      make(chan *PacketData, 8),
 		additional:   make(chan packet.Packet, 16),
 		spawn:        make(chan struct{}),
 		conn:         netConn,
@@ -380,14 +380,14 @@ func (conn *Conn) WritePacket(pk packet.Packet) error {
 // data. If a read deadline is set, an error is returned if the deadline is reached before any packet is
 // received. ReadPacket must not be called on multiple goroutines simultaneously.
 //
-// If the packet read was not implemented, a *packet.Unknown is returned, containing the raw payload of the
+// If the packet read was not implemented, a *packet.Unknown is returned, containing the raw Payload of the
 // packet read.
 func (conn *Conn) ReadPacket() (pk packet.Packet, err error) {
 	if len(conn.additional) > 0 {
 		return <-conn.additional, nil
 	}
 	if data, ok := conn.takeDeferredPacket(); ok {
-		pk, err := data.decode(conn)
+		pk, err := data.Decode(conn)
 		if err != nil {
 			conn.log.Error("read packet: " + err.Error())
 			return conn.ReadPacket()
@@ -407,7 +407,7 @@ func (conn *Conn) ReadPacket() (pk packet.Packet, err error) {
 	case <-conn.readDeadline:
 		return nil, conn.wrap(context.DeadlineExceeded, "read packet")
 	case data := <-conn.packets:
-		pk, err := data.decode(conn)
+		pk, err := data.Decode(conn)
 		if err != nil {
 			conn.log.Error("read packet: " + err.Error())
 			return conn.ReadPacket()
@@ -443,7 +443,7 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 // For direct reading, consider using ReadPacket() which decodes the packet.
 func (conn *Conn) ReadBytes() ([]byte, error) {
 	if data, ok := conn.takeDeferredPacket(); ok {
-		return data.full, nil
+		return data.Full, nil
 	}
 	select {
 	case <-conn.ctx.Done():
@@ -451,19 +451,19 @@ func (conn *Conn) ReadBytes() ([]byte, error) {
 	case <-conn.readDeadline:
 		return nil, conn.wrap(context.DeadlineExceeded, "read")
 	case data := <-conn.packets:
-		return data.full, nil
+		return data.Full, nil
 	}
 }
 
 // Read reads a packet from the connection into the byte slice passed, provided the byte slice is big enough
-// to carry the full packet.
+// to carry the Full packet.
 // It is recommended to use ReadPacket() and ReadBytes() rather than Read() in cases where reading is done directly.
 func (conn *Conn) Read(b []byte) (n int, err error) {
 	if data, ok := conn.takeDeferredPacket(); ok {
-		if len(b) < len(data.full) {
+		if len(b) < len(data.Full) {
 			return 0, conn.wrap(errBufferTooSmall, "read")
 		}
-		return copy(b, data.full), nil
+		return copy(b, data.Full), nil
 	}
 	select {
 	case <-conn.ctx.Done():
@@ -471,10 +471,10 @@ func (conn *Conn) Read(b []byte) (n int, err error) {
 	case <-conn.readDeadline:
 		return 0, conn.wrap(context.DeadlineExceeded, "read")
 	case data := <-conn.packets:
-		if len(b) < len(data.full) {
+		if len(b) < len(data.Full) {
 			return 0, conn.wrap(errBufferTooSmall, "read")
 		}
-		return copy(b, data.full), nil
+		return copy(b, data.Full), nil
 	}
 }
 
@@ -580,7 +580,7 @@ func (conn *Conn) Context() context.Context {
 
 // takeDeferredPacket locks the deferred packets lock and takes the next packet from the list of deferred
 // packets. If none was found, it returns false, and if one was found, the data and true is returned.
-func (conn *Conn) takeDeferredPacket() (*packetData, bool) {
+func (conn *Conn) takeDeferredPacket() (*PacketData, bool) {
 	conn.deferredPacketMu.Lock()
 	defer conn.deferredPacketMu.Unlock()
 
@@ -597,7 +597,7 @@ func (conn *Conn) takeDeferredPacket() (*packetData, bool) {
 }
 
 // deferPacket defers a packet so that it is obtained in the next ReadPacket call
-func (conn *Conn) deferPacket(pk *packetData) {
+func (conn *Conn) deferPacket(pk *PacketData) {
 	conn.deferredPacketMu.Lock()
 	conn.deferredPackets = append(conn.deferredPackets, pk)
 	conn.deferredPacketMu.Unlock()
@@ -606,13 +606,13 @@ func (conn *Conn) deferPacket(pk *packetData) {
 // receive receives an incoming serialised packet from the underlying connection. If the connection is not yet
 // logged in, the packet is immediately handled.
 func (conn *Conn) receive(data []byte) error {
-	pkData, err := parseData(data, conn)
+	pkData, err := ParseData(data, conn)
 	if err != nil {
 		return err
 	}
-	if pkData.h.PacketID == packet.IDDisconnect {
+	if pkData.Header.PacketID == packet.IDDisconnect {
 		// We always handle disconnect packets and close the connection if one comes in.
-		pks, err := pkData.decode(conn)
+		pks, err := pkData.Decode(conn)
 		if err != nil {
 			return err
 		}
@@ -637,12 +637,12 @@ func (conn *Conn) receive(data []byte) error {
 	return conn.handle(pkData)
 }
 
-// handle tries to handle the incoming packetData.
-func (conn *Conn) handle(pkData *packetData) error {
+// handle tries to handle the incoming PacketData.
+func (conn *Conn) handle(pkData *PacketData) error {
 	for _, id := range conn.expectedIDs.Load().([]uint32) {
-		if id == pkData.h.PacketID {
+		if id == pkData.Header.PacketID {
 			// If the packet was expected, so we handle it right now.
-			pks, err := pkData.decode(conn)
+			pks, err := pkData.Decode(conn)
 			if err != nil {
 				return err
 			}
@@ -850,7 +850,7 @@ func (conn *Conn) handleServerToClientHandshake(pk *packet.ServerToClientHandsha
 	c.Salt = strings.TrimRight(c.Salt, "=")
 	salt, err := base64.RawStdEncoding.DecodeString(c.Salt)
 	if err != nil {
-		return fmt.Errorf("decode ServerToClientHandshake salt: %w", err)
+		return fmt.Errorf("Decode ServerToClientHandshake salt: %w", err)
 	}
 
 	x, _ := pub.Curve.ScalarMult(pub.X, pub.Y, conn.privateKey.D.Bytes())
@@ -863,7 +863,7 @@ func (conn *Conn) handleServerToClientHandshake(pk *packet.ServerToClientHandsha
 	conn.enc.EnableEncryption(keyBytes)
 	conn.dec.EnableEncryption(keyBytes)
 
-	// We write a ClientToServerHandshake packet (which has no payload) as a response.
+	// We write a ClientToServerHandshake packet (which has no Payload) as a response.
 	_ = conn.WritePacket(&packet.ClientToServerHandshake{})
 	return nil
 }
@@ -1119,7 +1119,7 @@ func (conn *Conn) handleResourcePackDataInfo(pk *packet.ResourcePackDataInfo) er
 			case <-conn.ctx.Done():
 				return
 			case frag := <-pack.newFrag:
-				// Write the fragment to the full buffer of the downloading resource pack.
+				// Write the fragment to the Full buffer of the downloading resource pack.
 				_, _ = pack.buf.Write(frag)
 			}
 		}
@@ -1133,7 +1133,7 @@ func (conn *Conn) handleResourcePackDataInfo(pk *packet.ResourcePackDataInfo) er
 		// First parse the resource pack from the total byte buffer we obtained.
 		newPack, err := resource.Read(pack.buf)
 		if err != nil {
-			conn.log.Error("download resource pack: invalid full resource pack data: "+err.Error(), "UUID", id)
+			conn.log.Error("download resource pack: invalid Full resource pack data: "+err.Error(), "UUID", id)
 			return
 		}
 		conn.packQueue.packAmount--
@@ -1159,7 +1159,7 @@ func (conn *Conn) handleResourcePackChunkData(pk *packet.ResourcePackChunkData) 
 	}
 	lastData := pack.buf.Len()+int(pack.chunkSize) >= int(pack.size)
 	if !lastData && uint32(len(pk.Data)) != pack.chunkSize {
-		// The chunk data didn't have the full size and wasn't the last data to be sent for the resource pack,
+		// The chunk data didn't have the Full size and wasn't the last data to be sent for the resource pack,
 		// meaning we got too little data.
 		return fmt.Errorf("expected chunk size %v, got %v", pack.chunkSize, len(pk.Data))
 	}
@@ -1350,8 +1350,8 @@ func (conn *Conn) handlePlayStatus(pk *packet.PlayStatus) error {
 		_ = conn.close(conn.closeErr("cannot join a vanilla game on edu edition"))
 		return fmt.Errorf("cannot join a vanilla game on edu edition")
 	case packet.PlayStatusLoginFailedServerFull:
-		_ = conn.close(conn.closeErr("server full"))
-		return fmt.Errorf("server full")
+		_ = conn.close(conn.closeErr("server Full"))
+		return fmt.Errorf("server Full")
 	case packet.PlayStatusLoginFailedEditorVanilla:
 		_ = conn.close(conn.closeErr("cannot join a vanilla game on editor"))
 		return fmt.Errorf("cannot join a vanilla game on editor")
@@ -1383,7 +1383,7 @@ func (conn *Conn) enableEncryption(clientPublicKey *ecdsa.PublicKey) error {
 	signer, _ := jose.NewSigner(jose.SigningKey{Key: conn.privateKey, Algorithm: jose.ES384}, &jose.SignerOptions{
 		ExtraHeaders: map[jose.HeaderKey]any{"x5u": login.MarshalPublicKey(&conn.privateKey.PublicKey)},
 	})
-	// We produce an encoded JWT using the header and payload above, then we send the JWT in a ServerToClient-
+	// We produce an encoded JWT using the header and Payload above, then we send the JWT in a ServerToClient-
 	// Handshake packet so that the client can initialise encryption.
 	serverJWT, err := jwt.Signed(signer).Claims(saltClaims{Salt: base64.RawStdEncoding.EncodeToString(conn.salt)}).Serialize()
 	if err != nil {

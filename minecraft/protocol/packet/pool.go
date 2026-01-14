@@ -17,8 +17,16 @@ func RegisterPacketFromServer(id uint32, pk func() Packet) {
 // packetsFromClient holds packets that could be sent by the client.
 var packetsFromClient = map[uint32]func() Packet{}
 
+func PacketsFromClient() map[uint32]func() Packet {
+	return packetsFromClient
+}
+
 // packetsFromServer holds packets that could be sent by the server.
 var packetsFromServer = map[uint32]func() Packet{}
+
+func PacketsFromServer() map[uint32]func() Packet {
+	return packetsFromServer
+}
 
 // Pool is a map holding packets indexed by a packet ID.
 type Pool map[uint32]func() Packet
