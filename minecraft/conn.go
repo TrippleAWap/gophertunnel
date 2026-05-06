@@ -856,6 +856,18 @@ func (conn *Conn) handleServerToClientHandshake(pk *packet.ServerToClientHandsha
 // startGame sends a StartGame packet using the game data of the connection.
 func (conn *Conn) startGame() {
 	data := conn.gameData
+	if len(data.Dimensions) > 0 {
+		_ = conn.WritePacket(&packet.DimensionData{Definitions: data.Dimensions})
+	}
+	_ = conn.WritePacket(&packet.JigsawStructureData{
+		StructureData: map[string]any{
+			"processors":     make([]map[string]any, 0),
+			"template_pools": make([]map[string]any, 0),
+			"jigsaws":        make([]map[string]any, 0),
+			"structure_sets": make([]map[string]any, 0),
+		},
+	})
+	_ = conn.WritePacket(&packet.VoxelShapes{})
 	_ = conn.WritePacket(&packet.StartGame{
 		Difficulty:                   data.Difficulty,
 		EntityUniqueID:               data.EntityUniqueID,
@@ -942,6 +954,7 @@ func (conn *Conn) handleStartGame(pk *packet.StartGame) error {
 		Experiments:                  pk.Experiments,
 		UseBlockNetworkIDHashes:      pk.UseBlockNetworkIDHashes,
 		PropertyData:                 pk.PropertyData,
+		Dimensions:                   conn.gameData.Dimensions,
 	}
 	conn.expect(packet.IDItemRegistry)
 	return nil

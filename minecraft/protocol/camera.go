@@ -656,37 +656,3 @@ func (x *CameraAimAssistActorPriorityData) Marshal(r IO) {
 	r.Int32(&x.ActorIndex)
 	r.Int32(&x.Priority)
 }
-
-// CameraSplineDefinition represents a named camera spline definition.
-type CameraSplineDefinition struct {
-	// Name is the name of the spline definition.
-	Name string
-	// Instruction is the spline instruction for this definition.
-	Instruction CameraSplineInstruction
-}
-
-// Marshal encodes/decodes a CameraSplineDefinition.
-func (x *CameraSplineDefinition) Marshal(r IO) {
-	r.String(&x.Name)
-	Single(r, &x.Instruction)
-}
-
-// CameraAimAssistActorPriorityData represents priority data for aim assist actor targeting.
-type CameraAimAssistActorPriorityData struct {
-	// PresetIndex is the index of the aim assist preset.
-	PresetIndex int32
-	// CategoryIndex is the index of the aim assist category.
-	CategoryIndex int32
-	// ActorIndex is the index of the actor.
-	ActorIndex int32
-	// Priority is the priority value for this actor.
-	Priority int32
-}
-
-// Marshal encodes/decodes a CameraAimAssistActorPriorityData.
-func (x *CameraAimAssistActorPriorityData) Marshal(r IO) {
-	r.Int32(&x.PresetIndex)
-	r.Int32(&x.CategoryIndex)
-	r.Int32(&x.ActorIndex)
-	r.Int32(&x.Priority)
-}
