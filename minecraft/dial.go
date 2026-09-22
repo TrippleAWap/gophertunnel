@@ -134,6 +134,9 @@ type Dialer struct {
 	// (pre-1.21.90) when connecting to the server. This should only be used for outdated
 	// servers, as enabling it will cause compatibility issues with updated servers.
 	EnableLegacyAuth bool
+
+	// SkipPing, if set to true, will skip the ping request sent to the server before connecting.
+	SkipPing bool
 }
 
 // Dial dials a Minecraft connection to the address passed over the network passed. The network is typically
@@ -274,9 +277,10 @@ func (d Dialer) DialContextNetwork(ctx context.Context, network Network, address
 		d.IdentityData = identityData
 	}
 
-	var pong []byte
-	if pong, err = network.PingContext(ctx, address); err == nil {
-		address = addressWithPongPort(pong, address)
+	if !d.SkipPing {
+		if pong, err := network.PingContext(ctx, address); err == nil {
+			address = addressWithPongPort(pong, address)
+		}
 	}
 
 	var netConn net.Conn
